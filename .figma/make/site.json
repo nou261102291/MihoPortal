@@ -1,0 +1,10 @@
+{
+  "description": "Streamline B2B industrial operations with a comprehensive portal for managing equipment status, spare parts, and service requests, enhancing efficiency and support.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
