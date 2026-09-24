@@ -998,7 +998,7 @@ export default function App() {
         {screen === 'tickets'       && <Tickets addToast={addToast} tickets={state.tickets} onTicketDetail={handleTicketDetail} onCreateTicket={createTicket} />}
         {screen === 'ticket-detail' && activeTicket && <TicketDetail ticket={activeTicket} onBack={() => navigate(prevScreen)} addToast={addToast} onUpdateTicket={updateTicket} onAddComment={addTicketComment} />}
         {screen === 'orders'        && <Orders addToast={addToast} orders={state.orders} />}
-        {screen === 'admin'         && <AdminPanel user={user} addToast={addToast} onCreateOrder={createOrder} />}
+        {screen === 'admin'         && <AdminPanel user={user} addToast={addToast} onCreateOrder={createOrder} adminState={state} onUpdateUsers={updateUsers} onUpdateMachines={updateMachines} onUpdatePricing={updatePricing} onUpdateSlas={updateSlas} onUpdateSystemSettings={updateSystemSettings} />}
         {screen === 'profile'       && <Profile user={user} addToast={addToast} />}
         {screen === 'calendar'      && <Calendar onBack={() => navigate('dashboard')} />}
       </main>

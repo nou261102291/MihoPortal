@@ -74,9 +74,64 @@ export interface Order {
   trackingInfo?: string
 }
 
+export interface AdminUser {
+  id: string
+  name: string
+  email: string
+  role: UserRole
+  plant: string
+  status: 'Active' | 'Inactive'
+  lastLogin: string
+}
+
+export interface MachineRecord {
+  id: string
+  model: string
+  type: string
+  plant: string
+  line: string
+  installed: string
+  warranty: 'Active' | 'Expired'
+  serial: string
+}
+
+export interface PricingRecord {
+  id: string
+  name: string
+  price: number
+  stock: number
+  category: string
+  threshold: number
+}
+
+export interface SlaRecord {
+  type: string
+  color: string
+  response: string
+  resolution: string
+  unit: string
+  escalation: string
+}
+
+export interface SystemSettings {
+  companyName: string
+  supportEmail: string
+  supportPhone: string
+  timezone: string
+  currency: string
+  dateFormat: string
+  language: string
+  backupSchedule: string
+}
+
 export interface AppState {
   tickets: Ticket[]
   catalogItems: CatalogItem[]
   rfqCart: RfqLineItem[]
   orders: Order[]
+  users: AdminUser[]
+  machines: MachineRecord[]
+  pricing: PricingRecord[]
+  slas: SlaRecord[]
+  systemSettings: SystemSettings
 }

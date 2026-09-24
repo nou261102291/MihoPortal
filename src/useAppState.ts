@@ -1,5 +1,5 @@
 import { useCallback, useReducer } from 'react'
-import type { AppState, CatalogItem, Order, OrderLineItem, RfqLineItem, Ticket } from './types'
+import type { AdminUser, AppState, CatalogItem, MachineRecord, Order, OrderLineItem, PricingRecord, RfqLineItem, SlaRecord, SystemSettings, Ticket } from './types'
 
 type CreateTicketInput = {
   machine: string
@@ -27,6 +27,11 @@ type AppAction =
   | { type: 'UPDATE_RFQ_QTY'; payload: { id: string; qty: number } }
   | { type: 'CLEAR_RFQ' }
   | { type: 'CREATE_ORDER'; payload: CreateOrderInput }
+  | { type: 'UPDATE_USERS'; payload: AdminUser[] }
+  | { type: 'UPDATE_MACHINES'; payload: MachineRecord[] }
+  | { type: 'UPDATE_PRICING'; payload: PricingRecord[] }
+  | { type: 'UPDATE_SLAS'; payload: SlaRecord[] }
+  | { type: 'UPDATE_SYSTEM_SETTINGS'; payload: SystemSettings }
   | { type: 'RESET' }
 
 function createInitialState(): AppState {
@@ -205,6 +210,45 @@ function createInitialState(): AppState {
         trackingInfo: 'Delivered 2026-08-22',
       },
     ],
+    users: [
+      { id: 'USR-001', name: 'Klaus Weber', email: 'admin@miho.de', role: 'Miho Admin', plant: 'HQ Frankfurt', status: 'Active', lastLogin: '2026-09-23 08:14' },
+      { id: 'USR-002', name: 'Tunde Akinola', email: 'field@miho.de', role: 'Field Engineer', plant: 'NBC Lagos', status: 'Active', lastLogin: '2026-09-23 06:52' },
+      { id: 'USR-003', name: 'Chidinma Eze', email: 'procurement@nbc.ng', role: 'Procurement Manager', plant: 'NBC Lagos', status: 'Active', lastLogin: '2026-09-22 15:30' },
+      { id: 'USR-004', name: 'Emeka Okonkwo', email: 'engineer@nbc.ng', role: 'Brewery Engineer', plant: 'NBC Lagos', status: 'Active', lastLogin: '2026-09-22 11:05' },
+      { id: 'USR-005', name: 'Amara Osei', email: 'a.osei@miho.de', role: 'Field Engineer', plant: 'CHI Ikeja', status: 'Inactive', lastLogin: '2026-09-10 09:22' },
+    ],
+    machines: [
+      { id: 'MCH-001', model: 'miho David 2', type: 'Empty Bottle Inspector', plant: 'NBC Lagos', line: 'Line 3', installed: '2021-03-15', warranty: 'Active', serial: 'DV2-LAG-2103' },
+      { id: 'MCH-002', model: 'miho EC-Cam', type: 'Label Inspection', plant: 'NBC Lagos', line: 'Line 5', installed: '2020-07-22', warranty: 'Expired', serial: 'ECC-LAG-2007' },
+      { id: 'MCH-003', model: 'miho Gauss 2U', type: 'Metal Detection', plant: 'NBC Lagos', line: 'Line 3', installed: '2022-01-10', warranty: 'Active', serial: 'G2U-LAG-2201' },
+      { id: 'MCH-004', model: 'miho TOP-Cam', type: 'Closure Inspection', plant: 'NBC Lagos', line: 'Line 5', installed: '2021-11-08', warranty: 'Active', serial: 'TPC-LAG-2111' },
+      { id: 'MCH-005', model: 'miho Newton X2P', type: 'X-Ray Inspector', plant: 'CHI Ikeja', line: 'Line 1', installed: '2023-05-20', warranty: 'Active', serial: 'NX2-CHI-2305' },
+    ],
+    pricing: [
+      { id: 'MIHO-NX2P-DET-01', name: 'miho Newton X2P — X-Ray Line Detector', price: 450000, stock: 12, category: 'Inspector', threshold: 3 },
+      { id: 'MIHO-TC-UV-04', name: 'miho TOP-Cam — UV LED Lighting Kit', price: 120000, stock: 0, category: 'Inspector', threshold: 2 },
+      { id: 'MIHO-GAU-COIL-07', name: 'miho Gauss 2U — Detection Coil Assy', price: 290000, stock: 5, category: 'Inspector', threshold: 2 },
+      { id: 'MIHO-DV2-SENS-12', name: 'miho David 2 — Proximity Sensor M12', price: 18500, stock: 48, category: 'Inspector', threshold: 10 },
+      { id: 'MIHO-EC-LAMP-03', name: 'miho EC-Cam — Strobe Lamp Module', price: 76000, stock: 8, category: 'Labeler', threshold: 3 },
+      { id: 'MIHO-FIL-SEAL-09', name: 'miho Filler — Valve Seal Set (24-head)', price: 55000, stock: 22, category: 'Filler', threshold: 5 },
+    ],
+    slas: [
+      { type: 'Emergency Intervention', color: '#EF4444', response: '2', resolution: '8', unit: 'hours', escalation: 'Klaus Weber' },
+      { type: 'Routine Maintenance', color: '#3b82f6', response: '5', resolution: '1', unit: 'business days', escalation: 'Tunde Akinola' },
+      { type: 'Annual Overhaul', color: '#FF6600', response: '30', resolution: '5', unit: 'calendar days', escalation: 'Klaus Weber' },
+      { type: 'Validations', color: '#8b5cf6', response: '3', resolution: '3', unit: 'business days', escalation: 'Amara Osei' },
+      { type: 'Commissioning', color: '#0055A4', response: '14', resolution: '3', unit: 'calendar days', escalation: 'Tunde Akinola' },
+    ],
+    systemSettings: {
+      companyName: 'Miho Inspection Systems Ltd Nigeria',
+      supportEmail: 'support@miho-nigeria.com',
+      supportPhone: '+234 1 234 5678',
+      timezone: 'Africa/Lagos (WAT, UTC+1)',
+      currency: 'NGN (₦)',
+      dateFormat: 'DD/MM/YYYY',
+      language: 'English (en-NG)',
+      backupSchedule: 'Daily at 02:00 WAT',
+    },
   }
 }
 
@@ -294,6 +338,16 @@ function appReducer(state: AppState, action: AppAction): AppState {
       }
       return { ...state, orders: [order, ...state.orders] }
     }
+    case 'UPDATE_USERS':
+      return { ...state, users: action.payload }
+    case 'UPDATE_MACHINES':
+      return { ...state, machines: action.payload }
+    case 'UPDATE_PRICING':
+      return { ...state, pricing: action.payload }
+    case 'UPDATE_SLAS':
+      return { ...state, slas: action.payload }
+    case 'UPDATE_SYSTEM_SETTINGS':
+      return { ...state, systemSettings: action.payload }
     case 'RESET':
       return createInitialState()
     default:
@@ -336,6 +390,26 @@ export function useAppState() {
     dispatch({ type: 'CREATE_ORDER', payload })
   }, [])
 
+  const updateUsers = useCallback((payload: AdminUser[]) => {
+    dispatch({ type: 'UPDATE_USERS', payload })
+  }, [])
+
+  const updateMachines = useCallback((payload: MachineRecord[]) => {
+    dispatch({ type: 'UPDATE_MACHINES', payload })
+  }, [])
+
+  const updatePricing = useCallback((payload: PricingRecord[]) => {
+    dispatch({ type: 'UPDATE_PRICING', payload })
+  }, [])
+
+  const updateSlas = useCallback((payload: SlaRecord[]) => {
+    dispatch({ type: 'UPDATE_SLAS', payload })
+  }, [])
+
+  const updateSystemSettings = useCallback((payload: SystemSettings) => {
+    dispatch({ type: 'UPDATE_SYSTEM_SETTINGS', payload })
+  }, [])
+
   const resetAppState = useCallback(() => {
     dispatch({ type: 'RESET' })
   }, [])
@@ -350,6 +424,11 @@ export function useAppState() {
     updateRfqQty,
     clearRfqCart,
     createOrder,
+    updateUsers,
+    updateMachines,
+    updatePricing,
+    updateSlas,
+    updateSystemSettings,
     resetAppState,
   }
 }
