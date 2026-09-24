@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { AuthUser } from './types'
+import type { AuthUser, OrderLineItem } from './types'
 
 type AdminTab = 'obof' | 'users' | 'machines' | 'pricing' | 'sla' | 'system'
 
@@ -26,9 +26,19 @@ const CLIENTS = [
 interface Props {
   user: AuthUser
   addToast: (msg: string, type?: 'success' | 'error' | 'info') => void
+  onCreateOrder: (input: {
+    client: string
+    contact: string
+    items: OrderLineItem[]
+    notes: string
+    source: 'RFQ' | 'Admin OBOF'
+    status?: 'Pending Approval' | 'Processing' | 'Shipped' | 'Delivered'
+    deliveryAddress?: string
+    trackingInfo?: string
+  }) => void
 }
 
-export default function AdminPanel({ user, addToast }: Props) {
+export default function AdminPanel({ user, addToast, onCreateOrder }: Props) {
   const [tab, setTab] = useState<AdminTab>('obof')
   const isAdmin = user.role === 'Miho Admin'
 
@@ -70,7 +80,7 @@ export default function AdminPanel({ user, addToast }: Props) {
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
-        {tab === 'obof' && <OBOF addToast={addToast} />}
+        {tab === 'obof' && <OBOF addToast={addToast} onCreateOrder={onCreateOrder} />}
         {tab === 'users' && isAdmin && <UserMgmt addToast={addToast} />}
         {tab === 'machines' && isAdmin && <MachineRegistry addToast={addToast} />}
         {tab === 'pricing' && isAdmin && <PricingMgmt addToast={addToast} />}
@@ -82,7 +92,7 @@ export default function AdminPanel({ user, addToast }: Props) {
 }
 
 // ─── ORDER ON BEHALF OF ──────────────────────────────────────────────────
-function OBOF({ addToast }: { addToast: Props['addToast'] }) {
+function OBOF({ addToast, onCreateOrder }: { addToast: Props['addToast']; onCreateOrder: Props['onCreateOrder'] }) {
   const [step, setStep] = useState(1)
   const [client, setClient] = useState(CLIENTS[0].name)
   const [notes, setNotes] = useState('')
@@ -208,7 +218,25 @@ function OBOF({ addToast }: { addToast: Props['addToast'] }) {
           <button
             className="btn-primary w-full mt-5 flex items-center justify-center gap-2"
             style={{ padding: '13px 20px', fontSize: 14, fontWeight: 700, background: '#003366' }}
-            onClick={() => { setSubmitted(true); addToast('Quote submitted & PDF generated!', 'success') }}
+            onClick={() => {
+              onCreateOrder({
+                client: selectedClient.name,
+                contact: selectedClient.contact,
+                items: items.map(item => ({
+                  id: item.id,
+                  type: item.type,
+                  name: item.name,
+                  qty: item.qty,
+                  price: item.price,
+                })),
+                notes: notes.trim() || 'OBOF quote submitted from admin panel.',
+                source: 'Admin OBOF',
+                status: 'Pending Approval',
+                deliveryAddress: selectedClient.site,
+              })
+              setSubmitted(true)
+              addToast('Quote submitted & PDF generated!', 'success')
+            }}
           >
             📄 Submit & Generate PDF Quote
           </button>

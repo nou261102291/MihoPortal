@@ -8,12 +8,18 @@ export interface AuthUser {
   phone: string
 }
 
-export type Screen = 'dashboard' | 'catalog' | 'tickets' | 'orders' | 'admin' | 'profile' | 'ticket-detail' | 'machine-detail' | 'calendar' | 'rfq-cart'
+export type Screen = 'dashboard' | 'catalog' | 'tickets' | 'orders' | 'admin' | 'profile' | 'ticket-detail' | 'calendar' | 'rfq-cart'
 
 export interface Toast {
   id: string
   message: string
   type: 'success' | 'error' | 'info'
+}
+
+export interface TicketComment {
+  text: string
+  user: string
+  time: string
 }
 
 export interface Ticket {
@@ -26,4 +32,51 @@ export interface Ticket {
   desc: string
   assignee?: string
   timeline?: { time: string; event: string; user: string }[]
+  comments?: TicketComment[]
+}
+
+export interface CatalogItem {
+  id: string
+  name: string
+  category: string
+  price: string
+  stock: 'In Stock' | 'Backordered'
+  desc: string
+  img: string
+}
+
+export interface RfqLineItem {
+  id: string
+  name: string
+  category: string
+  price: string
+  qty: number
+}
+
+export interface OrderLineItem {
+  id: string
+  type: 'part' | 'service'
+  name: string
+  qty: number
+  price: string
+}
+
+export interface Order {
+  id: string
+  client: string
+  contact: string
+  items: OrderLineItem[]
+  notes: string
+  createdAt: string
+  status: 'Pending Approval' | 'Processing' | 'Shipped' | 'Delivered'
+  source: 'RFQ' | 'Admin OBOF'
+  deliveryAddress?: string
+  trackingInfo?: string
+}
+
+export interface AppState {
+  tickets: Ticket[]
+  catalogItems: CatalogItem[]
+  rfqCart: RfqLineItem[]
+  orders: Order[]
 }

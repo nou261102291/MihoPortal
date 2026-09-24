@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import Login from './Login'
 import AdminPanel from './AdminPanel'
-import type { AuthUser, Screen, Toast, Ticket, UserRole } from './types'
+import { useAppState } from './useAppState'
+import type { AppState, AuthUser, CatalogItem, Order, RfqLineItem, Screen, Toast, Ticket, UserRole } from './types'
 
 // ─── RBAC ─────────────────────────────────────────────────────────────────
 const ROLE_NAV: Record<UserRole, Screen[]> = {
@@ -107,11 +108,23 @@ function Sidebar({ user, active, onNav, onLogout }: { user: AuthUser; active: Sc
 }
 
 // ─── DASHBOARD ────────────────────────────────────────────────────────────
-function Dashboard({ user, addToast, onNav }: { user: AuthUser; addToast: (m: string, t?: 'success' | 'error' | 'info') => void; onNav: (s: Screen) => void }) {
+function Dashboard({
+  user,
+  addToast,
+  onNav,
+  tickets,
+  onCreateTicket,
+}: {
+  user: AuthUser
+  addToast: (m: string, t?: 'success' | 'error' | 'info') => void
+  onNav: (s: Screen) => void
+  tickets: Ticket[]
+  onCreateTicket: (input: { machine: string; desc: string; priority: Ticket['priority'] }) => void
+}) {
   const [emergencyOpen, setEmergencyOpen] = useState(false)
   const [newTicketMachine, setNewTicketMachine] = useState('miho EC-Cam')
   const [newTicketDesc, setNewTicketDesc] = useState('')
-  const [ticketCount, setTicketCount] = useState(4)
+  const [newTicketPriority, setNewTicketPriority] = useState<Ticket['priority']>('Critical')
 
   const machines = [
     { name: 'miho David 2', type: 'Empty Bottle Inspector', status: 'OK' as const, uptime: '98.2%', lastService: '2026-08-14' },
@@ -127,11 +140,16 @@ function Dashboard({ user, addToast, onNav }: { user: AuthUser; addToast: (m: st
 
   const submitEmergency = () => {
     if (!newTicketDesc) { addToast('Please describe the fault', 'error'); return }
-    setTicketCount(c => c + 1)
-    addToast(`Emergency ticket T-${String(ticketCount + 91).padStart(4, '0')} created — team notified`, 'success')
+    onCreateTicket({ machine: newTicketMachine, desc: newTicketDesc, priority: newTicketPriority })
+    addToast('Emergency ticket created — team notified', 'success')
     setEmergencyOpen(false)
+    setNewTicketMachine('miho EC-Cam')
     setNewTicketDesc('')
+    setNewTicketPriority('Critical')
+    onNav('tickets')
   }
+
+  const latestTicketId = tickets[0]?.id ?? 'T-0091'
 
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: 24, display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -228,7 +246,7 @@ function Dashboard({ user, addToast, onNav }: { user: AuthUser; addToast: (m: st
           <div style={{ marginTop: 16, borderTop: '1px solid #eef1f5', paddingTop: 14 }}>
             <div style={{ fontSize: 11.5, fontWeight: 700, color: '#5a7184', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Recent Activity</div>
             {[
-              { action: `Ticket T-009${ticketCount - 1} opened`, time: '14 min ago', color: '#EF4444' },
+              { action: `${latestTicketId} opened`, time: '14 min ago', color: '#EF4444' },
               { action: 'Parts order PO-2341 shipped', time: '2 hr ago', color: '#10B981' },
               { action: 'miho EC-Cam fault logged', time: '3 hr ago', color: '#F59E0B' },
             ].map((a, i) => (
@@ -271,9 +289,10 @@ function Dashboard({ user, addToast, onNav }: { user: AuthUser; addToast: (m: st
               </div>
               <div>
                 <label style={{ fontSize: 12, fontWeight: 600, color: '#4a6278', display: 'block', marginBottom: 4 }}>Priority</label>
-                <select className="form-input">
-                  <option>Line Down — Immediate Response Required</option>
-                  <option>Degraded Performance — Same Day</option>
+                  <select className="form-input" value={newTicketPriority} onChange={e => setNewTicketPriority(e.target.value as Ticket['priority'])}>
+                    <option value="Critical">Critical — Line Down</option>
+                    <option value="High">High — Degraded Performance</option>
+                    <option value="Normal">Normal — Planned</option>
                 </select>
               </div>
             </div>
@@ -289,28 +308,33 @@ function Dashboard({ user, addToast, onNav }: { user: AuthUser; addToast: (m: st
 }
 
 // ─── CATALOG ──────────────────────────────────────────────────────────────
-function Catalog({ addToast, rfqItems, setRfqItems }: { addToast: (m: string, t?: 'success' | 'error' | 'info') => void; rfqItems: string[]; setRfqItems: React.Dispatch<React.SetStateAction<string[]>> }) {
+function Catalog({
+  addToast,
+  catalogItems,
+  rfqItems,
+  onToggleRfqItem,
+  onNav,
+}: {
+  addToast: (m: string, t?: 'success' | 'error' | 'info') => void
+  catalogItems: CatalogItem[]
+  rfqItems: RfqLineItem[]
+  onToggleRfqItem: (item: CatalogItem) => void
+  onNav: (screen: Screen) => void
+}) {
   const [search, setSearch] = useState('')
   const [activeFilters, setActiveFilters] = useState<string[]>([])
-
-  const parts = [
-    { id: 'MIHO-NX2P-DET-01', name: 'miho Newton X2P — X-Ray Line Detector', category: 'Inspector', price: '₦450,000', stock: 'In Stock' as const, desc: 'High-sensitivity X-ray line detector for PET and glass bottles at up to 72,000 bph. Detects glass, metal, and dense contaminants.', img: 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=400&h=220&fit=crop&auto=format' },
-    { id: 'MIHO-TC-UV-04', name: 'miho TOP-Cam — UV LED Lighting Kit', category: 'Inspector', price: '₦120,000', stock: 'Backordered' as const, desc: 'UV-A 365nm LED illumination kit for closure inspection. IP67-rated, field-serviceable. Restock est. Oct 28, 2026.', img: 'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=400&h=220&fit=crop&auto=format' },
-    { id: 'MIHO-GAU-COIL-07', name: 'miho Gauss 2U — Detection Coil Assy', category: 'Inspector', price: '₦290,000', stock: 'In Stock' as const, desc: 'Electromagnetic coil assembly for 38mm and 45mm conveyor widths. Includes calibration test pieces.', img: 'https://images.unsplash.com/photo-1565514020179-026b92b84bb6?w=400&h=220&fit=crop&auto=format' },
-    { id: 'MIHO-DV2-SENS-12', name: 'miho David 2 — Proximity Sensor M12', category: 'Inspector', price: '₦18,500', stock: 'In Stock' as const, desc: 'M12 inductive proximity sensor, NPN NO, 4mm range, 10–30V DC. High-vibration rated for beverage lines.', img: 'https://images.unsplash.com/photo-1504868584819-f8e8b4b6d7e3?w=400&h=220&fit=crop&auto=format' },
-    { id: 'MIHO-EC-LAMP-03', name: 'miho EC-Cam — Strobe Lamp Module', category: 'Labeler', price: '₦76,000', stock: 'In Stock' as const, desc: '200,000 lux strobe lamp for EAN barcode inspection. Encoder-synchronised. Compatible with firmware v3.2+.', img: 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=400&h=220&fit=crop&auto=format' },
-    { id: 'MIHO-FIL-SEAL-09', name: 'miho Filler — Valve Seal Set (24-head)', category: 'Filler', price: '₦55,000', stock: 'In Stock' as const, desc: 'FDA-compliant EPDM seal set for 24-head rotary fillers. Annual replacement recommended. Includes O-rings and gaskets.', img: 'https://images.unsplash.com/photo-1573164713714-d95e436ab8d6?w=400&h=220&fit=crop&auto=format' },
-  ]
 
   const chips = ['Filler', 'Labeler', 'Inspector', 'In Stock', 'Backordered']
   const toggleFilter = (f: string) => setActiveFilters(p => p.includes(f) ? p.filter(x => x !== f) : [...p, f])
   const toggleRfq = (id: string, name: string) => {
-    const isIn = rfqItems.includes(id)
-    setRfqItems(p => isIn ? p.filter(x => x !== id) : [...p, id])
+    const item = catalogItems.find(part => part.id === id)
+    if (!item) return
+    const isIn = rfqItems.some(part => part.id === id)
+    onToggleRfqItem(item)
     addToast(isIn ? `Removed from RFQ` : `${name.split('—')[0].trim()} added to RFQ`, isIn ? 'info' : 'success')
   }
 
-  const filtered = parts.filter(p => {
+  const filtered = catalogItems.filter(p => {
     const matchSearch = !search || p.name.toLowerCase().includes(search.toLowerCase()) || p.id.toLowerCase().includes(search.toLowerCase())
     const matchFilter = activeFilters.length === 0 || activeFilters.some(f => p.category === f || p.stock === f)
     return matchSearch && matchFilter
@@ -324,7 +348,7 @@ function Catalog({ addToast, rfqItems, setRfqItems }: { addToast: (m: string, t?
           <p style={{ fontSize: 13, color: '#5a7184', marginTop: 2 }}>OEM parts for miho inspection and filling systems</p>
         </div>
         {rfqItems.length > 0 && (
-          <button className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <button className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: 6 }} onClick={() => onNav('rfq-cart')}>
             🛒 RFQ Cart ({rfqItems.length})
           </button>
         )}
@@ -368,8 +392,8 @@ function Catalog({ addToast, rfqItems, setRfqItems }: { addToast: (m: string, t?
                 <p style={{ fontSize: 12.5, color: '#4a6278', lineHeight: 1.5, flex: 1 }}>{part.desc}</p>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 10, borderTop: '1px solid #eef1f5' }}>
                   <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 17, fontWeight: 800, color: '#003366' }}>{part.price}</div>
-                  <button onClick={() => toggleRfq(part.id, part.name)} className={rfqItems.includes(part.id) ? 'btn-ghost' : 'btn-primary'} style={{ fontSize: 12.5, padding: '7px 14px' }}>
-                    {rfqItems.includes(part.id) ? '✓ In RFQ' : 'Add to RFQ'}
+                  <button onClick={() => toggleRfq(part.id, part.name)} className={rfqItems.some(item => item.id === part.id) ? 'btn-ghost' : 'btn-primary'} style={{ fontSize: 12.5, padding: '7px 14px' }}>
+                    {rfqItems.some(item => item.id === part.id) ? '✓ In RFQ' : 'Add to RFQ'}
                   </button>
                 </div>
               </div>
@@ -382,25 +406,27 @@ function Catalog({ addToast, rfqItems, setRfqItems }: { addToast: (m: string, t?
 }
 
 // ─── TICKETS ─────────────────────────────────────────────────────────────
-function Tickets({ addToast, onTicketDetail }: { addToast: (m: string, t?: 'success' | 'error' | 'info') => void; onTicketDetail: (t: Ticket) => void }) {
+function Tickets({
+  addToast,
+  tickets,
+  onTicketDetail,
+  onCreateTicket,
+}: {
+  addToast: (m: string, t?: 'success' | 'error' | 'info') => void
+  tickets: Ticket[]
+  onTicketDetail: (t: Ticket) => void
+  onCreateTicket: (input: { machine: string; desc: string; priority: Ticket['priority'] }) => void
+}) {
   const [showNew, setShowNew] = useState(false)
   const [filter, setFilter] = useState('All')
-  const [tickets, setTickets] = useState<Ticket[]>([
-    { id: 'T-0091', machine: 'miho EC-Cam', type: 'Emergency Intervention', status: 'Open', priority: 'Critical', date: '2026-09-23', desc: 'EAN barcode read error on Line 5, production halted.', timeline: [{ time: '08:14', event: 'Ticket created', user: 'Emeka Okonkwo' }, { time: '08:22', event: 'Assigned to Tunde Akinola', user: 'System' }] },
-    { id: 'T-0087', machine: 'miho David 2', type: 'Routine Maintenance', status: 'In Progress', priority: 'Normal', date: '2026-09-18', desc: 'Scheduled quarterly PM inspection and cleaning.', timeline: [{ time: '09:00', event: 'Ticket created', user: 'Klaus Weber' }, { time: '10:30', event: 'Engineer on-site', user: 'Tunde Akinola' }] },
-    { id: 'T-0081', machine: 'miho Gauss 2U', type: 'Validations', status: 'Closed', priority: 'Normal', date: '2026-09-10', desc: 'Annual IQ/OQ/PQ validation for metal detection.', timeline: [{ time: '08:00', event: 'Ticket created', user: 'Klaus Weber' }, { time: '14:00', event: 'Validation complete', user: 'Tunde Akinola' }] },
-    { id: 'T-0075', machine: 'miho TOP-Cam', type: 'Annual Overhaul', status: 'Closed', priority: 'Scheduled', date: '2026-08-28', desc: 'Annual overhaul completed. UV lamp replaced.', timeline: [{ time: '07:30', event: 'Ticket created', user: 'Klaus Weber' }, { time: '16:00', event: 'Overhaul complete', user: 'Amara Osei' }] },
-  ])
   const [form, setForm] = useState({ machine: 'miho EC-Cam', desc: '', priority: 'Critical' })
 
   const filtered = tickets.filter(t => filter === 'All' || t.status === filter)
 
   const submitNew = () => {
     if (!form.desc) { addToast('Please describe the fault', 'error'); return }
-    const newId = `T-${String(Math.max(...tickets.map(t => parseInt(t.id.split('-')[1]))) + 1).padStart(4, '0')}`
-    const newTicket: Ticket = { id: newId, machine: form.machine, type: 'Emergency Intervention', status: 'Open', priority: form.priority as Ticket['priority'], date: new Date().toISOString().split('T')[0], desc: form.desc, timeline: [{ time: new Date().toTimeString().slice(0, 5), event: 'Ticket created', user: 'You' }] }
-    setTickets(p => [newTicket, ...p])
-    addToast(`Emergency ticket ${newId} created — field team notified`, 'success')
+    onCreateTicket({ machine: form.machine, desc: form.desc, priority: form.priority as Ticket['priority'] })
+    addToast('Emergency ticket created — field team notified', 'success')
     setShowNew(false)
     setForm({ machine: 'miho EC-Cam', desc: '', priority: 'Critical' })
   }
@@ -479,10 +505,21 @@ function Tickets({ addToast, onTicketDetail }: { addToast: (m: string, t?: 'succ
 }
 
 // ─── TICKET DETAIL ────────────────────────────────────────────────────────
-function TicketDetail({ ticket, onBack, addToast }: { ticket: Ticket; onBack: () => void; addToast: (m: string, t?: 'success' | 'error' | 'info') => void }) {
-  const [status, setStatus] = useState(ticket.status)
+function TicketDetail({
+  ticket,
+  onBack,
+  addToast,
+  onUpdateTicket,
+  onAddComment,
+}: {
+  ticket: Ticket
+  onBack: () => void
+  addToast: (m: string, t?: 'success' | 'error' | 'info') => void
+  onUpdateTicket: (id: string, updates: Partial<Ticket>) => void
+  onAddComment: (id: string, text: string, user: string, time: string) => void
+}) {
   const [comment, setComment] = useState('')
-  const [comments, setComments] = useState<{ text: string; user: string; time: string }[]>([])
+  const comments = ticket.comments || []
 
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
@@ -500,7 +537,7 @@ function TicketDetail({ ticket, onBack, addToast }: { ticket: Ticket; onBack: ()
               </div>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <span style={{ fontSize: 12, padding: '3px 10px', borderRadius: 3, fontWeight: 700, background: ticket.priority === 'Critical' ? '#FF6600' : '#e2e8f0', color: ticket.priority === 'Critical' ? '#fff' : '#4a6278' }}>{ticket.priority}</span>
-                <select className="form-input" style={{ fontSize: 12.5, padding: '5px 10px', width: 'auto' }} value={status} onChange={e => { setStatus(e.target.value as Ticket['status']); addToast(`Status updated to ${e.target.value}`, 'success') }}>
+                <select className="form-input" style={{ fontSize: 12.5, padding: '5px 10px', width: 'auto' }} value={ticket.status} onChange={e => { onUpdateTicket(ticket.id, { status: e.target.value as Ticket['status'] }); addToast(`Status updated to ${e.target.value}`, 'success') }}>
                   <option value="Open">Open</option>
                   <option value="In Progress">In Progress</option>
                   <option value="Closed">Closed</option>
@@ -543,7 +580,7 @@ function TicketDetail({ ticket, onBack, addToast }: { ticket: Ticket; onBack: ()
               <textarea className="form-input" rows={2} placeholder="Add a comment or update..." value={comment} onChange={e => setComment(e.target.value)} />
               <button className="btn-primary mt-2" style={{ fontSize: 12.5 }} onClick={() => {
                 if (!comment) return
-                setComments(p => [...p, { text: comment, user: 'You', time: new Date().toTimeString().slice(0, 5) }])
+                onAddComment(ticket.id, comment, 'You', new Date().toTimeString().slice(0, 5))
                 addToast('Comment added', 'success')
                 setComment('')
               }}>Add Comment</button>
@@ -583,38 +620,38 @@ function TicketDetail({ ticket, onBack, addToast }: { ticket: Ticket; onBack: ()
 }
 
 // ─── ORDERS ───────────────────────────────────────────────────────────────
-function Orders({ addToast }: { addToast: (m: string, t?: 'success' | 'error' | 'info') => void }) {
+function Orders({ addToast, orders }: { addToast: (m: string, t?: 'success' | 'error' | 'info') => void; orders: Order[] }) {
   const [filter, setFilter] = useState('All')
-  const orders = [
-    { id: 'PO-2341', items: 2, total: '₦538,500', status: 'Shipped', date: '2026-09-20', eta: '2026-09-27' },
-    { id: 'PO-2335', items: 1, total: '₦290,000', status: 'Processing', date: '2026-09-15', eta: '2026-10-02' },
-    { id: 'PO-2318', items: 3, total: '₦143,000', status: 'Delivered', date: '2026-09-01', eta: '—' },
-    { id: 'PO-2301', items: 1, total: '₦450,000', status: 'Delivered', date: '2026-08-18', eta: '—' },
-  ]
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
   const filtered = orders.filter(o => filter === 'All' || o.status === filter)
+  const formatStatus = (status: Order['status']) => {
+    if (status === 'Pending Approval') return { background: '#fef3c7', color: '#92400e' }
+    if (status === 'Shipped') return { background: '#eff6ff', color: '#1d4ed8' }
+    if (status === 'Processing') return { background: '#fef3c7', color: '#92400e' }
+    return { background: '#f0fdf4', color: '#166534' }
+  }
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
       <h1 style={{ fontSize: 22, fontWeight: 800, color: '#003366', letterSpacing: '-0.02em' }}>Orders</h1>
       <div style={{ display: 'flex', gap: 8 }}>
-        {['All', 'Shipped', 'Processing', 'Delivered'].map(f => (
+        {['All', 'Pending Approval', 'Shipped', 'Processing', 'Delivered'].map(f => (
           <button key={f} onClick={() => setFilter(f)} className={`filter-chip ${filter === f ? 'active' : ''}`}>{f}</button>
         ))}
       </div>
       <div className="card">
         <table className="data-table w-full">
-          <thead><tr><th>Order ID</th><th>Items</th><th>Total</th><th>Status</th><th>Order Date</th><th>ETA</th><th>Actions</th></tr></thead>
+          <thead><tr><th>Order ID</th><th>Client</th><th>Items</th><th>Status</th><th>Order Date</th><th>Actions</th></tr></thead>
           <tbody>
             {filtered.map(o => (
               <tr key={o.id}>
                 <td><span style={{ fontFamily: 'JetBrains Mono, monospace', color: '#0055A4', fontWeight: 700 }}>{o.id}</span></td>
-                <td style={{ color: '#4a6278' }}>{o.items} lines</td>
-                <td style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 800, color: '#003366' }}>{o.total}</td>
-                <td><span style={{ fontSize: 12, padding: '3px 9px', borderRadius: 3, fontWeight: 600, background: o.status === 'Shipped' ? '#eff6ff' : o.status === 'Processing' ? '#fef3c7' : '#f0fdf4', color: o.status === 'Shipped' ? '#1d4ed8' : o.status === 'Processing' ? '#92400e' : '#166534' }}>{o.status}</span></td>
-                <td style={{ color: '#5a7184' }}>{o.date}</td>
-                <td style={{ color: o.eta === '—' ? '#aab8c4' : '#4a6278' }}>{o.eta}</td>
+                <td style={{ color: '#4a6278' }}>{o.client}</td>
+                <td style={{ color: '#4a6278' }}>{o.items.length} lines</td>
+                <td><span style={{ fontSize: 12, padding: '3px 9px', borderRadius: 3, fontWeight: 600, background: formatStatus(o.status).background, color: formatStatus(o.status).color }}>{o.status}</span></td>
+                <td style={{ color: '#5a7184' }}>{o.createdAt}</td>
                 <td>
                   <div style={{ display: 'flex', gap: 6 }}>
-                    <button className="btn-ghost" style={{ fontSize: 11.5, padding: '4px 10px' }} onClick={() => addToast(`Order ${o.id} details opened`, 'info')}>View</button>
+                    <button className="btn-ghost" style={{ fontSize: 11.5, padding: '4px 10px' }} onClick={() => setSelectedOrder(o)}>View</button>
                     <button className="btn-ghost" style={{ fontSize: 11.5, padding: '4px 10px' }} onClick={() => addToast(`Downloading PDF for ${o.id}...`, 'info')}>📄 PDF</button>
                   </div>
                 </td>
@@ -623,6 +660,73 @@ function Orders({ addToast }: { addToast: (m: string, t?: 'success' | 'error' | 
           </tbody>
         </table>
       </div>
+
+      {!selectedOrder && filtered.length === 0 && (
+        <div className="card" style={{ textAlign: 'center', padding: '52px 20px', color: '#8fa3b3' }}>
+          <div style={{ fontSize: 36, marginBottom: 10 }}>📦</div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: '#5a7184' }}>No orders match this filter.</div>
+          <div style={{ marginTop: 4, fontSize: 13 }}>Create an RFQ or admin order to populate this view.</div>
+        </div>
+      )}
+
+      {selectedOrder && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 60 }} onClick={() => setSelectedOrder(null)}>
+          <div className="card" style={{ width: 'min(720px, calc(100vw - 32px))', padding: 24 }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18 }}>
+              <div>
+                <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 13, color: '#0055A4', fontWeight: 700 }}>{selectedOrder.id}</div>
+                <h2 style={{ fontSize: 18, fontWeight: 800, color: '#003366', marginTop: 2 }}>{selectedOrder.client}</h2>
+                <div style={{ fontSize: 13, color: '#5a7184' }}>{selectedOrder.contact} · {selectedOrder.createdAt}</div>
+              </div>
+              <button onClick={() => setSelectedOrder(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#8fa3b3', fontSize: 18 }}>✕</button>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 0.9fr', gap: 20 }}>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#5a7184', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Line Items</div>
+                <div className="card" style={{ overflow: 'hidden' }}>
+                  <table className="data-table w-full">
+                    <thead><tr><th>Item</th><th>Qty</th><th>Price</th></tr></thead>
+                    <tbody>
+                      {selectedOrder.items.map(item => (
+                        <tr key={item.id}>
+                          <td style={{ color: '#003366', fontWeight: 600 }}>{item.name}</td>
+                          <td>{item.qty}</td>
+                          <td className="mono">{item.price}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <div className="card" style={{ padding: 16, background: '#fafbfc' }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#5a7184', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Summary</div>
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ fontSize: 11, color: '#8fa3b3', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Status</div>
+                  <div style={{ fontSize: 13.5, fontWeight: 700, color: '#003366' }}>{selectedOrder.status}</div>
+                </div>
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ fontSize: 11, color: '#8fa3b3', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Delivery Address</div>
+                  <div style={{ fontSize: 13, color: '#2c3e50' }}>{selectedOrder.deliveryAddress || '—'}</div>
+                </div>
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ fontSize: 11, color: '#8fa3b3', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Tracking</div>
+                  <div style={{ fontSize: 13, color: '#2c3e50' }}>{selectedOrder.trackingInfo || 'Not assigned'}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, color: '#8fa3b3', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Notes</div>
+                  <div style={{ fontSize: 13, color: '#2c3e50', lineHeight: 1.5 }}>{selectedOrder.notes}</div>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8, marginTop: 16 }}>
+                  <button className="btn-primary w-full" style={{ fontSize: 12.5 }} onClick={() => addToast(`Order ${selectedOrder.id} marked for follow-up`, 'success')}>Mark for Follow-up</button>
+                  <button className="btn-ghost w-full" style={{ fontSize: 12.5 }} onClick={() => addToast(`Tracking refresh requested for ${selectedOrder.id}`, 'info')}>Refresh Tracking</button>
+                  <button className="btn-ghost w-full" style={{ fontSize: 12.5 }} onClick={() => addToast(`Copying ${selectedOrder.id}...`, 'info')}>Copy Order ID</button>
+                  <button className="btn-ghost w-full" style={{ fontSize: 12.5 }} onClick={() => addToast(`Escalation note opened for ${selectedOrder.id}`, 'info')}>Escalate Issue</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -817,11 +921,11 @@ function Profile({ user, addToast }: { user: AuthUser; addToast: (m: string, t?:
 
 // ─── APP ROOT ─────────────────────────────────────────────────────────────
 export default function App() {
+  const { state, createTicket, updateTicket, addTicketComment, toggleRfqItem, removeRfqItem, updateRfqQty, clearRfqCart, createOrder, resetAppState } = useAppState()
   const [user, setUser] = useState<AuthUser | null>(null)
   const [screen, setScreen] = useState<Screen>('dashboard')
   const [toasts, setToasts] = useState<Toast[]>([])
-  const [rfqItems, setRfqItems] = useState<string[]>([])
-  const [activeTicket, setActiveTicket] = useState<Ticket | null>(null)
+  const [activeTicketId, setActiveTicketId] = useState<string | null>(null)
   const [prevScreen, setPrevScreen] = useState<Screen>('tickets')
 
   const addToast = useCallback((message: string, type: Toast['type'] = 'success') => {
@@ -834,11 +938,11 @@ export default function App() {
 
   const navigate = (s: Screen) => {
     setScreen(s)
-    if (s !== 'ticket-detail') setActiveTicket(null)
+    if (s !== 'ticket-detail') setActiveTicketId(null)
   }
 
   const handleTicketDetail = (t: Ticket) => {
-    setActiveTicket(t)
+    setActiveTicketId(t.id)
     setPrevScreen(screen)
     setScreen('ticket-detail')
   }
@@ -846,8 +950,27 @@ export default function App() {
   const handleLogout = () => {
     setUser(null)
     setScreen('dashboard')
-    setRfqItems([])
+    setActiveTicketId(null)
+    resetAppState()
   }
+
+  const handleSubmitRfq = (notes: string, deliveryAddress: string) => {
+    if (!user) return
+    createOrder({
+      client: user.plant,
+      contact: user.name,
+      items: state.rfqCart.map(item => ({ id: item.id, type: 'part', name: item.name, qty: item.qty, price: item.price })),
+      notes,
+      source: 'RFQ',
+      status: 'Pending Approval',
+      deliveryAddress,
+    })
+    clearRfqCart()
+    addToast('RFQ submitted successfully', 'success')
+    setScreen('orders')
+  }
+
+  const activeTicket = activeTicketId ? state.tickets.find(ticket => ticket.id === activeTicketId) || null : null
 
   // Keyboard nav
   useEffect(() => {
@@ -869,16 +992,151 @@ export default function App() {
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: '#F4F6F8' }}>
       <Sidebar user={user} active={screen} onNav={navigate} onLogout={handleLogout} />
       <main style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        {screen === 'dashboard'     && <Dashboard user={user} addToast={addToast} onNav={navigate} />}
-        {screen === 'catalog'       && <Catalog addToast={addToast} rfqItems={rfqItems} setRfqItems={setRfqItems} />}
-        {screen === 'tickets'       && <Tickets addToast={addToast} onTicketDetail={handleTicketDetail} />}
-        {screen === 'ticket-detail' && activeTicket && <TicketDetail ticket={activeTicket} onBack={() => navigate(prevScreen)} addToast={addToast} />}
-        {screen === 'orders'        && <Orders addToast={addToast} />}
-        {screen === 'admin'         && <AdminPanel user={user} addToast={addToast} />}
+        {screen === 'dashboard'     && <Dashboard user={user} addToast={addToast} onNav={navigate} tickets={state.tickets} onCreateTicket={createTicket} />}
+        {screen === 'catalog'       && <Catalog addToast={addToast} catalogItems={state.catalogItems} rfqItems={state.rfqCart} onToggleRfqItem={toggleRfqItem} onNav={navigate} />}
+        {screen === 'rfq-cart'      && <RfqCart user={user} addToast={addToast} items={state.rfqCart} onUpdateQty={updateRfqQty} onRemoveItem={removeRfqItem} onSubmit={handleSubmitRfq} onBack={() => navigate('catalog')} />}
+        {screen === 'tickets'       && <Tickets addToast={addToast} tickets={state.tickets} onTicketDetail={handleTicketDetail} onCreateTicket={createTicket} />}
+        {screen === 'ticket-detail' && activeTicket && <TicketDetail ticket={activeTicket} onBack={() => navigate(prevScreen)} addToast={addToast} onUpdateTicket={updateTicket} onAddComment={addTicketComment} />}
+        {screen === 'orders'        && <Orders addToast={addToast} orders={state.orders} />}
+        {screen === 'admin'         && <AdminPanel user={user} addToast={addToast} onCreateOrder={createOrder} />}
         {screen === 'profile'       && <Profile user={user} addToast={addToast} />}
         {screen === 'calendar'      && <Calendar onBack={() => navigate('dashboard')} />}
       </main>
       <ToastContainer toasts={toasts} dismiss={dismissToast} />
+    </div>
+  )
+}
+
+function RfqCart({
+  user,
+  addToast,
+  items,
+  onUpdateQty,
+  onRemoveItem,
+  onSubmit,
+  onBack,
+}: {
+  user: AuthUser
+  addToast: (m: string, t?: 'success' | 'error' | 'info') => void
+  items: RfqLineItem[]
+  onUpdateQty: (id: string, qty: number) => void
+  onRemoveItem: (id: string) => void
+  onSubmit: (notes: string, deliveryAddress: string) => void
+  onBack: () => void
+}) {
+  const [notes, setNotes] = useState('')
+  const [deliveryAddress, setDeliveryAddress] = useState(user.plant)
+
+  const estimatedTotal = items.reduce((sum, item) => {
+    const numericPrice = Number.parseInt(item.price.replace(/[^\d]/g, ''), 10)
+    return sum + (Number.isFinite(numericPrice) ? numericPrice * item.qty : 0)
+  }, 0)
+
+  const formatMoney = (value: number) => `₦${value.toLocaleString('en-NG')}`
+
+  return (
+    <div style={{ flex: 1, overflowY: 'auto', padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <button onClick={onBack} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#0055A4', fontSize: 13.5, fontWeight: 600 }}>← Back to Catalog</button>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div>
+          <h1 style={{ fontSize: 22, fontWeight: 800, color: '#003366', letterSpacing: '-0.02em' }}>RFQ Cart</h1>
+          <p style={{ fontSize: 13, color: '#5a7184', marginTop: 2 }}>Review selected items before submitting to Miho for approval</p>
+        </div>
+        <div className="card" style={{ padding: '8px 14px', fontSize: 12.5, fontWeight: 600, color: '#003366' }}>
+          {items.length} items selected
+        </div>
+      </div>
+
+      {items.length === 0 ? (
+        <div className="card" style={{ padding: 32, textAlign: 'center' }}>
+          <div style={{ fontSize: 38, marginBottom: 10 }}>🧾</div>
+          <div style={{ fontSize: 17, fontWeight: 700, color: '#003366' }}>Your RFQ cart is empty.</div>
+          <div style={{ color: '#5a7184', marginTop: 6 }}>Browse the catalog to add spare parts for quoting.</div>
+          <div style={{ marginTop: 18, display: 'flex', justifyContent: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <button className="btn-primary" onClick={onBack}>Browse Catalog</button>
+            <button className="btn-ghost" onClick={() => addToast('No items to submit yet', 'info')}>Review RFQ Checklist</button>
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 0.7fr', gap: 16, alignItems: 'start' }}>
+          <div className="card">
+            <table className="data-table w-full">
+              <thead><tr><th>Item</th><th>Qty</th><th>Unit Price</th><th>Subtotal</th><th></th></tr></thead>
+              <tbody>
+                {items.map(item => {
+                  const numericPrice = Number.parseInt(item.price.replace(/[^\d]/g, ''), 10)
+                  const lineTotal = Number.isFinite(numericPrice) ? numericPrice * item.qty : 0
+                  return (
+                    <tr key={item.id}>
+                      <td>
+                        <div style={{ fontWeight: 600, color: '#003366' }}>{item.name}</div>
+                        <div style={{ fontSize: 11.5, color: '#8fa3b3' }}>{item.category}</div>
+                      </td>
+                      <td style={{ width: 88 }}>
+                        <input
+                          type="number"
+                          min={1}
+                          className="form-input"
+                          value={item.qty}
+                          onChange={e => onUpdateQty(item.id, Number(e.target.value))}
+                          style={{ width: 72, padding: '6px 8px' }}
+                        />
+                      </td>
+                      <td className="mono">{item.price}</td>
+                      <td className="mono" style={{ color: '#003366', fontWeight: 700 }}>
+                        <div>{formatMoney(lineTotal)}</div>
+                        <div style={{ fontSize: 11, color: '#8fa3b3', fontWeight: 500 }}>{item.qty} × {item.price}</div>
+                      </td>
+                      <td>
+                        <button className="btn-ghost" style={{ fontSize: 11.5, padding: '4px 10px' }} onClick={() => onRemoveItem(item.id)}>Remove</button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="card" style={{ padding: 16, position: 'sticky', top: 0 }}>
+            <div style={{ fontWeight: 700, fontSize: 13, color: '#003366', marginBottom: 14, borderBottom: '1px solid #eef1f5', paddingBottom: 10 }}>RFQ Summary</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ background: '#f8fafc', borderRadius: 6, padding: 12, border: '1px solid #eef1f5' }}>
+                <div style={{ fontSize: 11.5, fontWeight: 700, color: '#5a7184', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Quote Breakdown</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <span style={{ color: '#5a7184' }}>Line items</span>
+                  <span style={{ color: '#003366', fontWeight: 700 }}>{items.length}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <span style={{ color: '#5a7184' }}>Units requested</span>
+                  <span style={{ color: '#003366', fontWeight: 700 }}>{items.reduce((sum, item) => sum + item.qty, 0)}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#5a7184' }}>Estimated total</span>
+                  <span className="mono" style={{ color: '#003366', fontWeight: 800 }}>{formatMoney(estimatedTotal)}</span>
+                </div>
+              </div>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: '#4a6278', display: 'block', marginBottom: 4 }}>Delivery Address</label>
+                <textarea className="form-input" rows={3} value={deliveryAddress} onChange={e => setDeliveryAddress(e.target.value)} />
+              </div>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: '#4a6278', display: 'block', marginBottom: 4 }}>Special Instructions</label>
+                <textarea className="form-input" rows={3} placeholder="Add delivery notes or instructions..." value={notes} onChange={e => setNotes(e.target.value)} />
+              </div>
+              <div style={{ borderTop: '1px solid #eef1f5', paddingTop: 12 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <span style={{ color: '#5a7184', fontWeight: 600 }}>Estimated Total</span>
+                  <span className="mono" style={{ color: '#003366', fontWeight: 800 }}>{formatMoney(estimatedTotal)}</span>
+                </div>
+                <div style={{ fontSize: 11.5, color: '#8fa3b3' }}>RFQs are submitted as pending approval orders.</div>
+                <div style={{ fontSize: 11.5, color: '#8fa3b3', marginTop: 4 }}>Each line is quoted at the selected quantity so procurement can review the full basket.</div>
+              </div>
+              <button className="btn-primary w-full" onClick={() => onSubmit(notes, deliveryAddress)}>Submit RFQ</button>
+              <button className="btn-ghost w-full" onClick={() => addToast('RFQ cart kept for later review', 'info')}>Save for Later</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
