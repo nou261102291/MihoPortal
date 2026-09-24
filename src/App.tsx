@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import Login from './Login'
 import AdminPanel from './AdminPanel'
 import { useAppState } from './useAppState'
@@ -179,7 +179,7 @@ function Dashboard({
             <div key={m.name} className="card" style={{ padding: '14px 16px', cursor: 'pointer', transition: 'box-shadow 0.15s' }}
               onMouseOver={e => (e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,51,102,0.12)')}
               onMouseOut={e => (e.currentTarget.style.boxShadow = '')}
-              onClick={() => addToast(`${m.name} detail view coming soon`, 'info')}>
+              onClick={() => { addToast(`Review ${m.name} in Service Tickets`, 'info'); onNav('tickets') }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
                 <div>
                   <div style={{ fontWeight: 700, fontSize: 13.5, color: '#003366' }}>{m.name}</div>
@@ -786,6 +786,7 @@ function Profile({ user, addToast }: { user: AuthUser; addToast: (m: string, t?:
   const [phone, setPhone] = useState(user.phone)
   const [twoFA, setTwoFA] = useState(false)
   const [notifs, setNotifs] = useState({ emailAlerts: true, smsAlerts: false, ticketUpdates: true, orderUpdates: true })
+  const nameInputRef = useRef<HTMLInputElement | null>(null)
   const initials = user.name.split(' ').map(n => n[0]).join('').slice(0, 2)
 
   const tabs = ['profile', 'security', 'notifications', 'preferences'] as const
@@ -801,7 +802,7 @@ function Profile({ user, addToast }: { user: AuthUser; addToast: (m: string, t?:
             <div style={{ fontWeight: 700, fontSize: 14, color: '#003366' }}>{user.name}</div>
             <div style={{ fontSize: 12, color: '#5a7184', marginTop: 2 }}>{user.email}</div>
             <div style={{ fontSize: 11.5, padding: '3px 10px', borderRadius: 20, background: '#eff6ff', color: '#1d4ed8', fontWeight: 600, marginTop: 10, display: 'inline-block' }}>{user.role}</div>
-            <button className="btn-ghost w-full mt-4" style={{ fontSize: 12 }} onClick={() => addToast('Avatar upload coming soon', 'info')}>Change Avatar</button>
+            <button className="btn-ghost w-full mt-4" style={{ fontSize: 12 }} onClick={() => { setProfileTab('profile'); nameInputRef.current?.focus(); addToast('Profile name field focused', 'info') }}>Edit Profile Details</button>
           </div>
           <div className="card" style={{ overflow: 'hidden' }}>
             {tabs.map(t => (
@@ -821,7 +822,7 @@ function Profile({ user, addToast }: { user: AuthUser; addToast: (m: string, t?:
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                 <div>
                   <label style={{ fontSize: 12, fontWeight: 600, color: '#4a6278', display: 'block', marginBottom: 4 }}>Full Name</label>
-                  <input className="form-input" value={name} onChange={e => setName(e.target.value)} />
+                  <input ref={nameInputRef} className="form-input" value={name} onChange={e => setName(e.target.value)} />
                 </div>
                 <div>
                   <label style={{ fontSize: 12, fontWeight: 600, color: '#4a6278', display: 'block', marginBottom: 4 }}>Email</label>
@@ -921,7 +922,7 @@ function Profile({ user, addToast }: { user: AuthUser; addToast: (m: string, t?:
 
 // ─── APP ROOT ─────────────────────────────────────────────────────────────
 export default function App() {
-  const { state, createTicket, updateTicket, addTicketComment, toggleRfqItem, removeRfqItem, updateRfqQty, clearRfqCart, createOrder, resetAppState } = useAppState()
+  const { state, createTicket, updateTicket, addTicketComment, toggleRfqItem, removeRfqItem, updateRfqQty, clearRfqCart, createOrder, updateUsers, updateMachines, updatePricing, updateSlas, updateSystemSettings, resetAppState } = useAppState()
   const [user, setUser] = useState<AuthUser | null>(null)
   const [screen, setScreen] = useState<Screen>('dashboard')
   const [toasts, setToasts] = useState<Toast[]>([])
